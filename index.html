@@ -156,7 +156,47 @@
     </div>
     <div id="status"></div>
 
-<script>
+<script>document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    const extension = file.name.split('.').pop().toLowerCase();
+
+    if (extension === 'pdf') {
+        reader.onload = function() {
+            const typedarray = new Uint8Array(this.result);
+            pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                let text = "";
+                let count = pdf.numPages;
+                for (let i = 1; i <= count; i++) {
+                    pdf.getPage(i).then(page => {
+                        page.getTextContent().then(content => {
+                            text += content.items.map(item => item.str).join(" ") + "\n";
+                            if (i === count) {
+                                document.getElementById('textBox').value = text;
+                                updateStats();
+                                showStatus("📄 فایلی PDF خوێندرایەوە");
+                            }
+                        });
+                    });
+                }
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    } 
+    else if (extension === 'docx') {
+        reader.onload = function(e) {
+            mammoth.extractRawText({arrayBuffer: e.target.result})
+                .then(result => {
+                    document.getElementById('textBox').value = result.value;
+                    updateStats();
+                    showStatus("📄 فایلی Word خوێندرایەوە");
+                });
+        };
+        reader.readAsArrayBuffer(file);
+    }
+});
     const conversionMap = [
         { uni: 'ڵ', ali: 'لِ' }, { uni: 'ڕ', ali: 'رِ' }, { uni: 'ژ', ali: 'ذ' }, { uni: 'ۆ', ali: 'وَ' },
         { uni: 'پ', ali: 'ث' }, { uni: 'چ', ali: 'ض' }, { uni: 'گ', ali: 'ط' }, { uni: 'ڵ', ali: 'لَ' },
