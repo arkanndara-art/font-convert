@@ -85,7 +85,7 @@
             <div class="modal-body">
                 <p><strong>ناوی گەشەپێدەر:</strong> ئه‌ركان دارا </p>
                 <p><strong>وەشانی پڕۆژەکە:</strong> 1.4</p>
-                <p><strong>بەرواری دروستکردن:</strong> 2026</p>
+                <p><strong> دروستکردن:</strong> 2026</p>
 <p><strong>مافی كۆپیكردن:</strong> پارێزراوه‌</p>
                 <hr style="margin: 15px 0; opacity: 0.2;">
                 <p><strong>زانیاری لەسەر بەشەکان:</strong></p>
@@ -200,7 +200,8 @@
     const conversionMap = [
         { uni: 'قەوارەی زایۆنی', ali: 'ئیسرائیل' }, { uni: 'ڕ', ali: 'رَ' }, { uni: 'ژ', ali: 'ذ' }, { uni: 'ۆ', ali: 'وَ' },  { uni: 'ڵا', ali: 'لَا' },
         { uni: 'پ', ali: 'ث' }, { uni: 'چ', ali: 'ض' }, { uni: 'گ', ali: 'ط' }, { uni: 'ڵ', ali: 'لَ' },   { uni: 'ڵ', ali: 'لَ' },
-        { uni: 'ڤ', ali: 'ظ' }, { uni: 'ێ', ali: 'يَ' }, { uni: 'ۆ', ali: 'وَ' }, { uni: 'ڕ', ali: 'رَ' },   { uni: 'ڵ ', ali: 'لَ' },
+        { uni: 'ڤ', ali: 'ظ' }, { uni: 'ێ', ali: 'يَ' }, { uni: 'ۆ', ali: 'وَ' }, { uni: 'ڕ', ali: 'رِ' }, 
+
         { uni: 'ە', ali: 'ة' }, { uni: 'ی', ali: 'ي' }, { uni: 'ک', ali: 'ك' },  { uni: 'ڵا', ali: 'لآ' },
     ];
 
@@ -247,29 +248,88 @@
             document.getElementById('oil-basra').innerText = `🇮🇶 نه‌وتی به‌سڕه‌: $${(brent - 2.50).toFixed(2)}`;
         } catch (e) {}
     }
+let newsList = [];
+let nIdx = 0;
 
-    let newsList = [];
-    let nIdx = 0;
-    async function getNews() {
-        const urls = [{n:'رووداو', u:'https://www.rudaw.net/sorani/rss'},{n:'الجزیرة', u:'https://www.aljazeera.net/rss'},{n:'SkyNews', u:'https://www.skynewsarabia.com/rss.xml'}];
-        newsList = [];
-        for(let s of urls) {
-            try {
-                const r = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(s.u)}`);
-                const d = await r.json();
-                d.items.slice(0,5).forEach(i => newsList.push({t:i.title, l:i.link, s:s.n}));
-            } catch(e){}
+async function getNews() {
+    const urls = [
+        {n:'کاناڵی هەشت', u:'https://channel8.com/rss/sorani'},
+        {n:'الجزیرة', u:'https://www.aljazeera.net/rss'},
+        {n:'SkyNews', u:'https://www.skynewsarabia.com/rss.xml'},
+        {n:'RT Arabic', u:'https://arabic.rt.com/rss/'},
+        {n:'سەباح (INA)', u:'https://www.ina.iq/rss.xml'}
+    ];
+    
+    let tempSources = [];
+
+    const results = await Promise.allSettled(urls.map(async (s) => {
+        try {
+            const r = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(s.u)}&t=${Date.now()}`);
+            const d = await r.json();
+            if (d.status === 'ok' && d.items && d.items.length > 0) {
+                return d.items.slice(0, 5).map(i => ({t: i.title, l: i.link, s: s.n}));
+            }
+        } catch(e) {}
+        return null;
+    }));
+
+    let newFetchedList = [];
+    results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value) {
+            tempSources.push(result.value);
         }
-        newsList.sort(() => Math.random() - 0.5);
-        showNextNews();
+    });
+
+    // ڕیزکردنی هەواڵەکان بە نۆرە (Round Robin) بۆ ئەوەی نۆرەبڕی تێدا نەبێت
+    for (let i = 0; i < 5; i++) {
+        tempSources.forEach(source => {
+            if (source[i]) newFetchedList.push(source[i]);
+        });
     }
+
+    if (newFetchedList.length > 0) {
+        newsList = newFetchedList; // نوێکردنەوەی لیستەکە بەبێ تێکدانی nIdx
+        if (nIdx === 0) showNextNews(); 
+    }
+}
+
+function showNextNews() {
+    const el = document.getElementById('news-link');
+    if (!el || newsList.length === 0) return;
+    
+    // کەمکردنەوەی کاتی ئەنیمەیشن بۆ ئەوەی لەگەڵ ٥ چرکەکە بگونجێت
+    el.style.transition = "opacity 0.3s ease-in-out";
+    el.style.opacity = 0;
+
+    setTimeout(() => {
+        const currentNews = newsList[nIdx];
+        el.innerHTML = `<span style="color:#f1c40f; font-weight:bold;">${currentNews.s}:</span> ${currentNews.t}`;
+        el.href = currentNews.l;
+        el.style.opacity = 1;
+        
+        nIdx = (nIdx + 1) % newsList.length;
+    }, 300);
+}
+
+// دەستپێکردنی یەکەمجار
+getNews();
+
+// هەر ٥ چرکە جارێک هەواڵەکە بگۆڕێت
+setInterval(showNextNews, 5000);
+
+// هەر ١٥ خولەک جارێک هەواڵەکان لە سێرڤەرەوە نوێ بکەرەوە (بەبێ ئەوەی شریتەکە بوەستێت)
+setInterval(getNews, 900000);
     function showNextNews() {
-        if(!newsList.length) return;
+        if (!newsList.length) return;
         const el = document.getElementById('news-link');
+        if (!el) return;
+        
         el.innerHTML = `<span class="source-tag">${newsList[nIdx].s}:</span> ${newsList[nIdx].t}`;
         el.href = newsList[nIdx].l;
         nIdx = (nIdx + 1) % newsList.length;
     }
+
+    getNews();
 
     async function updateWeather() {
         try {
